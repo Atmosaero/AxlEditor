@@ -1,4 +1,4 @@
-#include "Reference/Viewport/ReferenceViewport.h"
+#include "Reference/Qt/Viewport/ReferenceViewport.h"
 #include <QApplication>
 #include <QMouseEvent>
 #include <QtTest>
@@ -29,6 +29,32 @@ class ViewportInputTests final : public QObject
 {
     Q_OBJECT
 private slots:
+    void pickingFrameAndGizmoPriorityInBothModes() {
+        for (bool twoD : {true, false}) {
+            ReferenceSceneProvider scene;
+            const auto id = scene.CreateObject("Cube");
+            EditorOperations operations(scene);
+            ReferenceViewport viewport(scene); viewport.BindOperations(&operations);
+            viewport.Set2DMode(twoD);
+            QVERIFY(Show(viewport));
+            operations.Select(id); viewport.SetSelectedObject(id); viewport.FrameSelected();
+            viewport.SetSelectedObject(0); operations.Select(0);
+            QTest::mouseClick(&viewport, Qt::LeftButton, Qt::NoModifier, viewport.rect().center());
+            QCOMPARE(operations.Selection(), id);
+            QTest::mouseClick(&viewport, Qt::LeftButton, Qt::NoModifier, QPoint(10, 10));
+            QCOMPARE(operations.Selection(), ObjectId{0});
+            if (twoD) {
+                operations.Select(id); viewport.SetSelectedObject(id);
+                const auto start = *scene.GetTransform(id);
+                QTest::mousePress(&viewport, Qt::LeftButton, Qt::NoModifier, XHandle(viewport));
+                QCOMPARE(QWidget::mouseGrabber(), &viewport);
+                Move(viewport, XHandle(viewport) + QPoint(30, 0), Qt::LeftButton);
+                QCOMPARE(operations.Selection(), id);
+                QTest::keyClick(&viewport, Qt::Key_Escape);
+                QVERIFY(scene.GetTransform(id)->position == start.position);
+            }
+        }
+    }
     void rotationRingsEditEachAxisAndAccumulateAcrossTheSeam() {
         for (int axis = 0; axis < 3; ++axis) {
             QVector3D direction, u, v;

@@ -1,4 +1,4 @@
-#include "Reference/Assets/ReferenceAssetProvider.h"
+#include "Reference/Qt/ReferenceAssetProvider.h"
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest>

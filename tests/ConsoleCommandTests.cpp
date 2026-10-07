@@ -1,7 +1,7 @@
-#include "Editor/ConsoleCommands.h"
-#include "Editor/EditorContext.h"
-#include "Modules/Console/ConsoleModule.h"
-#include "Modules/Console/EditorConsole.h"
+#include "Editor/Qt/ConsoleCommands.h"
+#include "Editor/Qt/EditorContext.h"
+#include "Tools/Console/ConsoleTool.h"
+#include "Tools/Console/EditorConsole.h"
 #include <QLineEdit>
 #include <QMenuBar>
 #include <QRegularExpression>
@@ -16,8 +16,8 @@ struct Output final : IEditorLog {
 struct Host {
     QMainWindow window;
     QMenu* view = window.menuBar()->addMenu("View");
-    QMenu* modules = window.menuBar()->addMenu("Modules");
-    EditorContext context{window, *view, *modules};
+    QMenu* tools = window.menuBar()->addMenu("Tools");
+    EditorContext context{window, *view, *tools};
 };
 // An ordinary C++ class can register without inheriting QObject or owning UI.
 struct CustomCommand {
@@ -157,8 +157,8 @@ private slots:
 
     void enterRunsBuiltinsAndExternalCommands() {
         Host host;
-        ConsoleModule module;
-        module.Initialize(host.context);
+        ConsoleTool tool;
+        tool.Initialize(host.context);
         auto* commands = host.context.GetService<ConsoleCommands>();
         auto* input = host.window.findChild<QLineEdit*>("ConsoleInput");
         auto* output = host.context.GetService<EditorConsole>();
@@ -166,7 +166,7 @@ private slots:
         host.window.resize(640, 480);
         host.window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&host.window));
-        module.Show();
+        tool.Show();
         input->setFocus();
         Submit(*input, "help");
         QVERIFY(input->text().isEmpty());
@@ -194,14 +194,14 @@ private slots:
         QVERIFY(output->toPlainText().isEmpty());
         Submit(*input, "nonexistent");
         QVERIFY(output->toPlainText().contains("[Error] Unknown command: nonexistent"));
-        module.Shutdown();
+        tool.Shutdown();
         QVERIFY(!owner.registration && !host.context.GetService<ConsoleCommands>());
     }
 
     void historyRestoresDraftAndClearLeavesInputUsable() {
         Host host;
-        ConsoleModule module;
-        module.Initialize(host.context);
+        ConsoleTool tool;
+        tool.Initialize(host.context);
         auto* input = host.window.findChild<QLineEdit*>("ConsoleInput");
         Submit(*input, "echo first");
         Submit(*input, "echo second");
@@ -224,27 +224,27 @@ private slots:
         Host host;
         ConsoleCommands existing;
         QVERIFY(host.context.RegisterService(existing));
-        ConsoleModule module;
+        ConsoleTool tool;
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Duplicate editor service:.*"));
-        module.Initialize(host.context);
-        QVERIFY(!module.Dock());
+        tool.Initialize(host.context);
+        QVERIFY(!tool.Dock());
         QVERIFY(!host.context.GetService<IEditorLog>() && !host.context.GetService<EditorConsole>());
         QCOMPARE(host.context.GetService<ConsoleCommands>(), &existing);
-        QVERIFY(host.view->actions().isEmpty() && host.modules->actions().isEmpty());
+        QVERIFY(host.view->actions().isEmpty() && host.tools->actions().isEmpty());
         host.context.UnregisterService(&existing);
-        module.Initialize(host.context);
+        tool.Initialize(host.context);
         auto* commands = host.context.GetService<ConsoleCommands>();
         QVERIFY(commands);
         auto command = commands->RegisterCommand("external", "", [](const auto&, auto&) {});
-        delete module.Dock();
+        delete tool.Dock();
         QVERIFY(!command && !host.context.GetService<ConsoleCommands>());
         QVERIFY(host.context.RegisterService(existing));
-        module.Shutdown();
+        tool.Shutdown();
         QCOMPARE(host.context.GetService<ConsoleCommands>(), &existing);
         host.context.UnregisterService(&existing);
-        module.Initialize(host.context);
+        tool.Initialize(host.context);
         QCOMPARE(host.context.GetService<ConsoleCommands>()->GetCommands().size(), size_t(5));
-        module.Shutdown();
+        tool.Shutdown();
     }
 };
 

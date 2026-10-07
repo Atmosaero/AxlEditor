@@ -1,5 +1,6 @@
 /.tools/
 /build/
+/build-*/
 /artifacts/
 /aqtinstall.log
 /ARCHITECTURE_CLEANUP_PLAN.txt

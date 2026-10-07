@@ -9,8 +9,11 @@
 using ObjectId = std::uint64_t;
 inline constexpr ObjectId InvalidObjectId = 0;
 
-// Called synchronously on the editor thread. IDs are stable and never reused
-// during the provider's lifetime; roots have parent 0. Hierarchies are acyclic.
+// Called synchronously on the editor thread. IDs are stable within a document;
+// creation never recycles deleted IDs. Undo can restore the same identity. A
+// document replacement starts a new editor session: retained callbacks must
+// validate its generation even when loaded document IDs match. Roots have
+// parent 0. Hierarchies are acyclic.
 // Name/transform/parent access requires a live ID; invalid IDs throw out_of_range.
 // Transforms are local to the parent. Delete removes the object and its subtree.
 // A live object may have no Transform (nullopt). SetTransform edits an existing

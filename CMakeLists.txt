@@ -2,6 +2,26 @@ cmake_minimum_required(VERSION 3.22)
 
 project(AxlEditor VERSION 0.1.0 LANGUAGES CXX)
 
+option(AXL_BUILD_EDITOR "Build the Qt editor" ON)
+option(AXL_BUILD_TESTS "Build focused editor tests" OFF)
+add_library(AxlData INTERFACE)
+target_include_directories(AxlData INTERFACE src)
+target_compile_features(AxlData INTERFACE cxx_std_17)
+if(AXL_BUILD_TESTS)
+    enable_testing()
+    add_executable(AxlSceneContractTests tests/SceneContractTests.cpp)
+    set_target_properties(AxlSceneContractTests PROPERTIES AUTOMOC OFF AUTOUIC OFF)
+    target_include_directories(AxlSceneContractTests PRIVATE src)
+    target_compile_features(AxlSceneContractTests PRIVATE cxx_std_17)
+    add_test(NAME scene_contracts_without_qt COMMAND AxlSceneContractTests)
+    add_executable(AxlNeutralModelTests tests/NeutralModelTests.cpp)
+    target_link_libraries(AxlNeutralModelTests PRIVATE AxlData)
+    add_test(NAME neutral_models_without_qt COMMAND AxlNeutralModelTests)
+endif()
+if(NOT AXL_BUILD_EDITOR)
+    return() # This configuration never searches for Qt.
+endif()
+
 find_package(Qt6 6.12 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg)
 
 qt_standard_project_setup()
@@ -10,11 +30,15 @@ qt_add_executable(AxlEditor WIN32
     ${EDITOR_ICON_SOURCES}
     # Bootstrap and editor shell.
     src/main.cpp
-    src/Editor/EditorWindow.h src/Editor/EditorWindow.cpp
-    src/Editor/EditorTheme.h src/Editor/EditorTheme.cpp
-    src/Editor/EditorContext.h src/Editor/IEditorModule.h
-    src/Editor/IEditorViewport.h src/Editor/IEditorLog.h
-    src/Editor/ConsoleCommands.h src/Editor/ConsoleCommands.cpp
+    src/Editor/Qt/EditorWindow.h src/Editor/Qt/EditorWindow.cpp
+    src/Editor/Qt/EditorTheme.h src/Editor/Qt/EditorTheme.cpp
+    src/Editor/Qt/EditorContext.h src/Editor/Application/IEditorTool.h
+    src/Editor/Qt/IEditorViewport.h src/Editor/Qt/IEditorLog.h
+    src/Editor/Qt/ConsoleCommands.h src/Editor/Qt/ConsoleCommands.cpp
+    src/Editor/Application/EditorOperations.h src/Editor/Application/EditorSession.h
+    src/Editor/Application/TransformGesture.h
+    src/Editor/Qt/DocumentActions.h src/Editor/Qt/DocumentFiles.h
+    src/Editor/Qt/SnapshotHistory.h src/Editor/Qt/AssetWidgets.h
 
     # Small editor-facing data contracts.
     src/Contracts/Transform.h src/Contracts/ISceneProvider.h
@@ -22,18 +46,22 @@ qt_add_executable(AxlEditor WIN32
 
     # Replaceable reference backend and its property editor.
     src/Reference/Scene/Scene.h src/Reference/Scene/ReferenceSceneProvider.h
-    src/Reference/Assets/ReferenceAssetProvider.h src/Reference/Inspector/CommentSection.h
+    src/Reference/Qt/ReferenceAssetProvider.h src/Reference/Qt/CommentSection.h
+    src/Reference/Assets/AssetCatalog.h src/Reference/Qt/AssetLinkSection.h
+    src/Reference/Qt/SceneDocument.h src/Reference/Qt/SceneCodec.h
 
-    # Editor tools and modules.
-    src/Editor/InspectorProperties.h src/Modules/Console/EditorConsole.h
-    src/Modules/Console/ConsoleModule.h src/Modules/Console/ConsoleModule.cpp
-    src/Modules/ScriptCanvas/ScriptCanvasModule.h src/Modules/ScriptCanvas/ScriptCanvasModule.cpp
-    src/Modules/ScriptCanvas/ScriptCanvasView.h src/Modules/ScriptCanvas/ScriptCanvasView.cpp
-    src/Modules/ScriptCanvas/ScriptGraph.h
+    # Editor tools.
+    src/Editor/Qt/InspectorProperties.h src/Tools/Console/EditorConsole.h
+    src/Tools/Console/ConsoleTool.h src/Tools/Console/ConsoleTool.cpp
+    src/Tools/ScriptCanvas/ScriptCanvasTool.h src/Tools/ScriptCanvas/ScriptCanvasTool.cpp
+    src/Tools/ScriptCanvas/ScriptCanvasView.h src/Tools/ScriptCanvas/ScriptCanvasView.cpp
+    src/Tools/ScriptCanvas/ScriptGraph.h
+    src/Tools/ScriptCanvas/GraphDocument.h src/Tools/ScriptCanvas/GraphCodec.h
 
     # Reference viewport; external backends may supply their own QWidget.
-    src/Reference/Viewport/ReferenceViewport.h src/Reference/Viewport/ReferenceViewport.cpp
-    src/Reference/Viewport/TranslateGizmo.h src/Reference/Viewport/TransformGizmo.h
+    src/Reference/Qt/Viewport/ReferenceViewport.h src/Reference/Qt/Viewport/ReferenceViewport.cpp
+    src/Reference/Qt/Viewport/TranslateGizmo.h src/Reference/Qt/Viewport/TransformGizmo.h
+    src/Reference/Qt/Viewport/GizmoPainting.cpp
 )
 target_include_directories(AxlEditor PRIVATE src)
 target_compile_features(AxlEditor PRIVATE cxx_std_17)
@@ -52,36 +80,30 @@ if(WIN32)
     )
 endif()
 
-# Optional focused checks for editor contracts, tools and module lifetime.
-option(AXL_BUILD_TESTS "Build focused editor tests" OFF)
+# Optional focused Qt adapter checks.
 if(AXL_BUILD_TESTS)
     find_package(Qt6 6.12 REQUIRED COMPONENTS Test)
     enable_testing()
-    add_executable(AxlSceneContractTests tests/SceneContractTests.cpp)
-    set_target_properties(AxlSceneContractTests PROPERTIES AUTOMOC OFF AUTOUIC OFF)
-    target_include_directories(AxlSceneContractTests PRIVATE src)
-    target_compile_features(AxlSceneContractTests PRIVATE cxx_std_17)
-    add_test(NAME scene_contracts_without_qt COMMAND AxlSceneContractTests)
     qt_add_executable(AxlAssetProviderTests tests/AssetProviderTests.cpp)
     target_include_directories(AxlAssetProviderTests PRIVATE src)
     target_compile_features(AxlAssetProviderTests PRIVATE cxx_std_17)
     target_link_libraries(AxlAssetProviderTests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME reference_asset_provider COMMAND AxlAssetProviderTests)
-    qt_add_executable(AxlModuleLifecycleTests
-        tests/ModuleLifecycleTests.cpp
-        src/Modules/Console/ConsoleModule.h src/Modules/Console/ConsoleModule.cpp
-        src/Editor/ConsoleCommands.h src/Editor/ConsoleCommands.cpp
-        src/Modules/ScriptCanvas/ScriptCanvasModule.h src/Modules/ScriptCanvas/ScriptCanvasModule.cpp src/Modules/ScriptCanvas/ScriptCanvasView.cpp
+    qt_add_executable(AxlToolLifecycleTests
+        tests/ToolLifecycleTests.cpp
+        src/Tools/Console/ConsoleTool.h src/Tools/Console/ConsoleTool.cpp
+        src/Editor/Qt/ConsoleCommands.h src/Editor/Qt/ConsoleCommands.cpp
+        src/Tools/ScriptCanvas/ScriptCanvasTool.h src/Tools/ScriptCanvas/ScriptCanvasTool.cpp src/Tools/ScriptCanvas/ScriptCanvasView.cpp
     )
-    target_include_directories(AxlModuleLifecycleTests PRIVATE src)
-    target_compile_features(AxlModuleLifecycleTests PRIVATE cxx_std_17)
-    target_link_libraries(AxlModuleLifecycleTests PRIVATE Qt6::Widgets Qt6::Test)
-    add_test(NAME editor_module_lifecycle COMMAND AxlModuleLifecycleTests)
+    target_include_directories(AxlToolLifecycleTests PRIVATE src)
+    target_compile_features(AxlToolLifecycleTests PRIVATE cxx_std_17)
+    target_link_libraries(AxlToolLifecycleTests PRIVATE Qt6::Widgets Qt6::Test)
+    add_test(NAME editor_tool_lifecycle COMMAND AxlToolLifecycleTests)
 
     qt_add_executable(AxlConsoleCommandTests
         tests/ConsoleCommandTests.cpp
-        src/Editor/ConsoleCommands.h src/Editor/ConsoleCommands.cpp
-        src/Modules/Console/ConsoleModule.h src/Modules/Console/ConsoleModule.cpp
+        src/Editor/Qt/ConsoleCommands.h src/Editor/Qt/ConsoleCommands.cpp
+        src/Tools/Console/ConsoleTool.h src/Tools/Console/ConsoleTool.cpp
     )
     target_include_directories(AxlConsoleCommandTests PRIVATE src)
     target_compile_features(AxlConsoleCommandTests PRIVATE cxx_std_17)
@@ -92,12 +114,12 @@ if(AXL_BUILD_TESTS)
     # Intentionally links no reference viewport / OpenGL code.
     qt_add_executable(AxlEditorBoundaryTests
         ${EDITOR_ICON_SOURCES}
-        tests/EditorBoundaryTests.cpp src/Editor/IEditorViewport.h
-        src/Editor/EditorTheme.h src/Editor/EditorTheme.cpp
-        src/Editor/EditorWindow.h src/Editor/EditorWindow.cpp
-        src/Modules/Console/ConsoleModule.h src/Modules/Console/ConsoleModule.cpp
-        src/Editor/ConsoleCommands.h src/Editor/ConsoleCommands.cpp
-        src/Modules/ScriptCanvas/ScriptCanvasModule.h src/Modules/ScriptCanvas/ScriptCanvasModule.cpp src/Modules/ScriptCanvas/ScriptCanvasView.cpp
+        tests/EditorBoundaryTests.cpp src/Editor/Qt/IEditorViewport.h
+        src/Editor/Qt/EditorTheme.h src/Editor/Qt/EditorTheme.cpp
+        src/Editor/Qt/EditorWindow.h src/Editor/Qt/EditorWindow.cpp
+        src/Tools/Console/ConsoleTool.h src/Tools/Console/ConsoleTool.cpp
+        src/Editor/Qt/ConsoleCommands.h src/Editor/Qt/ConsoleCommands.cpp
+        src/Tools/ScriptCanvas/ScriptCanvasTool.h src/Tools/ScriptCanvas/ScriptCanvasTool.cpp src/Tools/ScriptCanvas/ScriptCanvasView.cpp
     )
     target_include_directories(AxlEditorBoundaryTests PRIVATE src)
     target_compile_features(AxlEditorBoundaryTests PRIVATE cxx_std_17)
@@ -108,8 +130,9 @@ if(AXL_BUILD_TESTS)
         -o "${CMAKE_CURRENT_BINARY_DIR}/tests/editor-boundaries.txt,txt")
 
     qt_add_executable(AxlViewportInputTests
-        tests/ViewportInputTests.cpp src/Editor/IEditorViewport.h
-        src/Reference/Viewport/ReferenceViewport.h src/Reference/Viewport/ReferenceViewport.cpp
+        tests/ViewportInputTests.cpp src/Editor/Qt/IEditorViewport.h
+        src/Reference/Qt/Viewport/GizmoPainting.cpp
+        src/Reference/Qt/Viewport/ReferenceViewport.h src/Reference/Qt/Viewport/ReferenceViewport.cpp
     )
     target_include_directories(AxlViewportInputTests PRIVATE src)
     target_compile_features(AxlViewportInputTests PRIVATE cxx_std_17)
@@ -118,14 +141,54 @@ if(AXL_BUILD_TESTS)
         -o "${CMAKE_CURRENT_BINARY_DIR}/viewport-input.txt,txt")
     qt_add_executable(AxlScriptCanvasTests
         tests/ScriptCanvasTests.cpp
-        src/Modules/ScriptCanvas/ScriptCanvasView.h src/Modules/ScriptCanvas/ScriptCanvasView.cpp
-        src/Modules/ScriptCanvas/ScriptGraph.h
+        src/Tools/ScriptCanvas/ScriptCanvasView.h src/Tools/ScriptCanvas/ScriptCanvasView.cpp
+        src/Tools/ScriptCanvas/ScriptGraph.h
     )
     target_include_directories(AxlScriptCanvasTests PRIVATE src)
     target_compile_features(AxlScriptCanvasTests PRIVATE cxx_std_17)
     target_link_libraries(AxlScriptCanvasTests PRIVATE Qt6::Widgets Qt6::Test)
     add_test(NAME editor_script_canvas COMMAND AxlScriptCanvasTests
         -o "${CMAKE_CURRENT_BINARY_DIR}/script-canvas.txt,txt")
+    qt_add_executable(AxlWorkflowTests ${EDITOR_ICON_SOURCES} tests/WorkflowTests.cpp
+        src/Editor/Qt/EditorWindow.cpp src/Editor/Qt/EditorTheme.cpp src/Editor/Qt/ConsoleCommands.cpp
+        src/Editor/Qt/IEditorViewport.h src/Tools/Console/ConsoleTool.cpp
+        src/Tools/ScriptCanvas/ScriptCanvasTool.cpp src/Tools/ScriptCanvas/ScriptCanvasView.cpp
+        src/Reference/Qt/Viewport/ReferenceViewport.cpp src/Reference/Qt/Viewport/GizmoPainting.cpp)
+    target_include_directories(AxlWorkflowTests PRIVATE src)
+    target_compile_features(AxlWorkflowTests PRIVATE cxx_std_17)
+    target_link_libraries(AxlWorkflowTests PRIVATE Qt6::Widgets Qt6::OpenGLWidgets Qt6::Test)
+    set_target_properties(AxlWorkflowTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/workflow-tests")
+    add_test(NAME editor_document_workflow COMMAND AxlWorkflowTests -o "${CMAKE_CURRENT_BINARY_DIR}/workflow-tests/workflow.txt,txt")
+    set_tests_properties(editor_document_workflow PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    if(WIN32)
+        set_tests_properties(editor_document_workflow PROPERTIES ENVIRONMENT "QT_PLUGIN_PATH=${QT_BIN_DIR}/../plugins")
+    endif()
+
+    qt_add_executable(AxlGraphDocumentTests tests/GraphDocumentTests.cpp
+        src/Tools/ScriptCanvas/ScriptCanvasView.cpp src/Editor/Qt/EditorTheme.cpp)
+    target_include_directories(AxlGraphDocumentTests PRIVATE src)
+    target_compile_features(AxlGraphDocumentTests PRIVATE cxx_std_17)
+    target_link_libraries(AxlGraphDocumentTests PRIVATE Qt6::Widgets Qt6::Test)
+    add_test(NAME script_graph_documents COMMAND AxlGraphDocumentTests -o "${CMAKE_CURRENT_BINARY_DIR}/graph-documents.txt,txt")
+    set_tests_properties(script_graph_documents PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    if(WIN32)
+        set_tests_properties(script_graph_documents PROPERTIES ENVIRONMENT "QT_PLUGIN_PATH=${QT_BIN_DIR}/../plugins")
+    endif()
+
+    qt_add_executable(AxlDocumentTests
+        ${EDITOR_ICON_SOURCES} tests/DocumentTests.cpp
+        src/Editor/Qt/EditorWindow.cpp src/Editor/Qt/EditorTheme.cpp
+        src/Editor/Qt/ConsoleCommands.cpp src/Editor/Qt/IEditorViewport.h)
+    target_include_directories(AxlDocumentTests PRIVATE src)
+    target_compile_features(AxlDocumentTests PRIVATE cxx_std_17)
+    target_link_libraries(AxlDocumentTests PRIVATE Qt6::Widgets Qt6::Test)
+    set_target_properties(AxlDocumentTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
+    add_test(NAME editor_documents COMMAND AxlDocumentTests -o "${CMAKE_CURRENT_BINARY_DIR}/tests/documents.txt,txt")
+    set_tests_properties(editor_documents PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    if(WIN32)
+        set_tests_properties(editor_documents PROPERTIES ENVIRONMENT "QT_PLUGIN_PATH=${QT_BIN_DIR}/../plugins")
+    endif()
+
     # Native GUI input checks need exclusive focus, even with ctest --parallel.
     set_tests_properties(editor_backend_boundaries editor_viewport_input editor_script_canvas editor_console_commands PROPERTIES RUN_SERIAL TRUE)
     if(WIN32)

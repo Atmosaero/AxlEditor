@@ -1,0 +1,38 @@
+{
+  "format": "axl-script-graph",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "1",
+      "type": "Start",
+      "x": -240,
+      "y": -80
+    },
+    {
+      "id": "2",
+      "type": "Print",
+      "x": 80,
+      "y": -80
+    }
+  ],
+  "pins": [
+    {
+      "id": "1",
+      "node": "1",
+      "direction": "Output",
+      "type": "Execution"
+    },
+    {
+      "id": "2",
+      "node": "2",
+      "direction": "Input",
+      "type": "Execution"
+    }
+  ],
+  "connections": [
+    {
+      "from": "1",
+      "to": "2"
+    }
+  ]
+}

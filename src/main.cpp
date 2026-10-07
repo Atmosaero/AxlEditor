@@ -1,11 +1,13 @@
-#include "Editor/EditorWindow.h"
-#include "Editor/EditorTheme.h"
-#include "Reference/Inspector/CommentSection.h"
-#include "Reference/Assets/ReferenceAssetProvider.h"
+#include "Editor/Qt/EditorWindow.h"
+#include "Editor/Qt/EditorTheme.h"
+#include "Reference/Qt/CommentSection.h"
+#include "Reference/Qt/ReferenceAssetProvider.h"
+#include "Reference/Qt/SceneDocument.h"
+#include "Reference/Qt/AssetLinkSection.h"
 #include "Reference/Scene/ReferenceSceneProvider.h"
-#include "Reference/Viewport/ReferenceViewport.h"
-#include "Modules/Console/ConsoleModule.h"
-#include "Modules/ScriptCanvas/ScriptCanvasModule.h"
+#include "Reference/Qt/Viewport/ReferenceViewport.h"
+#include "Tools/Console/ConsoleTool.h"
+#include "Tools/ScriptCanvas/ScriptCanvasTool.h"
 #include <QApplication>
 #include <QSurfaceFormat>
 
@@ -25,18 +27,16 @@ int main(int argc, char* argv[])
 
     // Runtime integration point: replace the provider and supply its viewport widget.
     ReferenceSceneProvider scene;
-    const ObjectId cube = scene.CreateObject("Cube");
-    auto transform = scene.GetTransform(cube).value();
-    transform.position = {0.0f, 0.5f, 0.0f};
-    scene.SetTransform(cube, transform);
     // Replace this instance with an external engine's IAssetProvider adapter.
-    ReferenceAssetProvider assets(QCoreApplication::applicationDirPath() + "/../Assets");
+    ReferenceAssetProvider assets("");
     auto* viewport = new ReferenceViewport(scene);
-    EditorWindow::ModuleList modules;
-    modules.push_back(std::make_unique<ConsoleModule>());
-    modules.push_back(std::make_unique<ScriptCanvasModule>());
-    EditorWindow window(scene, assets, viewport, &scene, std::move(modules));
+    EditorWindow::ToolList tools;
+    tools.push_back(std::make_unique<ConsoleTool>());
+    tools.push_back(std::make_unique<ScriptCanvasTool>());
+    EditorWindow window(scene, assets, viewport, &scene, std::move(tools));
     RegisterCommentSection(window.PropertySections(), scene);
+    SceneDocument document(window, scene, assets);
+    RegisterAssetLinkSection(window.PropertySections(), scene, assets, document.Session());
     window.show();
     return app.exec();
 }

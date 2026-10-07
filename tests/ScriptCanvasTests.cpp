@@ -1,4 +1,4 @@
-#include "Modules/ScriptCanvas/ScriptCanvasView.h"
+#include "Tools/ScriptCanvas/ScriptCanvasView.h"
 #include <QGraphicsScene>
 #include <QGraphicsPathItem>
 #include <QGraphicsRectItem>
@@ -122,7 +122,7 @@ private slots:
         QCOMPARE(print->pos(), before + QPointF(50, 35));
         bool stored = false;
         for (const auto& node : view.GraphData().Nodes())
-            if (node.id == f.print) stored = node.position == print->pos();
+            if (node.id == f.print) stored = node.position == Position{print->pos().x(), print->pos().y()};
         QVERIFY(stored);
         for (auto* item : Items(view, "ScriptConnection")) {
             auto* wire = dynamic_cast<QGraphicsPathItem*>(item);

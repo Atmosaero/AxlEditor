@@ -13,7 +13,8 @@ struct PropertyGroupInfo
 
 // Optional editor-facing service. No component base class or field descriptors.
 // Called on the editor thread with live ObjectIds. Missing objects throw out_of_range.
-// Group IDs are stable while present and not reused during the provider's lifetime.
+// Group IDs are stable within a document. Creation does not recycle deleted IDs;
+// Undo may restore them. Callbacks crossing document replacement need a session guard.
 // A registered section edits its backend directly; this API only manages groups.
 class IObjectProperties
 {

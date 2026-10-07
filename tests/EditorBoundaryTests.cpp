@@ -1,12 +1,12 @@
-#include "Editor/EditorWindow.h"
-#include "Editor/EditorTheme.h"
-#include "Modules/Console/EditorConsole.h"
-#include "Modules/Console/ConsoleModule.h"
-#include "Modules/ScriptCanvas/ScriptCanvasModule.h"
-#include "Editor/IEditorViewport.h"
-#include "Editor/InspectorProperties.h"
+#include "Editor/Qt/EditorWindow.h"
+#include "Editor/Qt/EditorTheme.h"
+#include "Tools/Console/EditorConsole.h"
+#include "Tools/Console/ConsoleTool.h"
+#include "Tools/ScriptCanvas/ScriptCanvasTool.h"
+#include "Editor/Qt/IEditorViewport.h"
+#include "Editor/Qt/InspectorProperties.h"
 #include "Reference/Scene/ReferenceSceneProvider.h"
-#include "Reference/Inspector/CommentSection.h"
+#include "Reference/Qt/CommentSection.h"
 #include <QAction>
 #include <QDoubleSpinBox>
 #include <QDockWidget>
@@ -27,22 +27,22 @@
 static_assert(std::is_standard_layout_v<Transform> && std::is_trivially_copyable_v<Transform>);
 
 namespace {
-EditorWindow::ModuleList TestModules(bool withCanvas = true)
+EditorWindow::ToolList TestTools(bool withCanvas = true)
 {
-    EditorWindow::ModuleList modules;
-    modules.push_back(std::make_unique<ConsoleModule>());
-    if (withCanvas) modules.push_back(std::make_unique<ScriptCanvasModule>());
-    return modules;
+    EditorWindow::ToolList tools;
+    tools.push_back(std::make_unique<ConsoleTool>());
+    if (withCanvas) tools.push_back(std::make_unique<ScriptCanvasTool>());
+    return tools;
 }
 
-struct ModuleTrace { QStringList calls; bool contextAlive = true; int destroyed = 0; };
+struct ToolTrace { QStringList calls; bool contextAlive = true; int destroyed = 0; };
 
-class TrackedModule final : public IEditorModule
+class TrackedTool final : public IEditorTool
 {
 public:
-    TrackedModule(ModuleTrace& trace, QString name, bool fail = false)
+    TrackedTool(ToolTrace& trace, QString name, bool fail = false)
         : trace_(trace), name_(std::move(name)), fail_(fail) {}
-    ~TrackedModule() override { ++trace_.destroyed; }
+    ~TrackedTool() override { ++trace_.destroyed; }
     void Initialize(EditorContext& context) override {
         context_ = &context;
         trace_.calls << "Initialize " + name_;
@@ -62,7 +62,7 @@ public:
         context_ = nullptr;
     }
 private:
-    ModuleTrace& trace_;
+    ToolTrace& trace_;
     QString name_;
     bool fail_;
     EditorContext* context_ = nullptr;
@@ -169,20 +169,58 @@ class EditorBoundaryTests final : public QObject
 {
     Q_OBJECT
 private slots:
+    void virtualAssetsPickerFilterAndOpenHandler() {
+        ForeignScene scene; MemoryAssets assets;
+        assets.assets = {{101, "Virtual texture", "Texture", "runtime://images/a"}, {102, "Virtual mesh", "Mesh", "runtime://meshes/b"}};
+        EditorWindow window(scene, assets);
+        auto* tree = window.findChild<QTreeWidget*>("AssetsTree");
+        auto* search = window.findChild<QLineEdit*>("AssetsSearch");
+        search->setText("texture"); QVERIFY(!tree->topLevelItem(0)->isHidden()); QVERIFY(tree->topLevelItem(1)->isHidden());
+        search->clear();
+        auto* type = window.findChild<QComboBox*>("AssetsTypeFilter"); type->setCurrentIndex(type->findData("Mesh"));
+        QVERIFY(tree->topLevelItem(0)->isHidden()); QVERIFY(!tree->topLevelItem(1)->isHidden());
+        AssetPicker picker(assets); auto* choices = picker.findChild<QTreeWidget*>("AssetPickerTree");
+        choices->setCurrentItem(choices->topLevelItem(0)); QCOMPARE(picker.Selected()->sourcePath, std::string("runtime://images/a"));
+        AssetId opened = 0; QObject owner;
+        QVERIFY(window.Context().GetService<AssetOpenHandlers>()->Register("Mesh", owner, [&](const AssetInfo& asset) { opened = asset.id; return true; }));
+        emit tree->itemDoubleClicked(tree->topLevelItem(1), 0); QCOMPARE(opened, AssetId{102});
+        window.Context().GetService<AssetOpenHandlers>()->Unregister(owner);
+        QVERIFY(!window.Context().GetService<AssetOpenHandlers>()->Open(assets.assets[1]));
+    }
+    void hierarchySearchRenameAndExpansionSurviveRefresh() {
+        ReferenceSceneProvider scene; EmptyAssets assets;
+        const auto parent = scene.CreateObject("Parent"), child = scene.CreateObject("Needle", parent);
+        EditorWindow window(scene, assets);
+        auto* tree = window.findChild<QTreeWidget*>("SceneTree");
+        auto* parentItem = tree->topLevelItem(0)->child(0);
+        parentItem->setExpanded(false); window.RefreshScene(child);
+        parentItem = tree->topLevelItem(0)->child(0);
+        QVERIFY(!parentItem->isExpanded());
+        auto* search = window.findChild<QLineEdit*>("HierarchySearch");
+        search->setText("Needle"); QVERIFY(!parentItem->isHidden()); QVERIFY(!parentItem->child(0)->isHidden());
+        QVERIFY(parentItem->isExpanded());
+        search->setText("Missing"); QVERIFY(parentItem->isHidden());
+        search->clear(); QVERIFY(!parentItem->isHidden());
+        QVERIFY(!parentItem->isExpanded());
+        window.findChild<QAction*>("RenameObjectAction")->trigger();
+        auto* name = window.findChild<QLineEdit*>("ObjectName");
+        name->setText("Renamed"); QTest::keyClick(name, Qt::Key_Return);
+        QCOMPARE(scene.GetName(child), std::string("Renamed"));
+    }
     void initTestCase() { ApplyDarkTheme(*qApp); }
     void init() { QFile::remove(QCoreApplication::applicationDirPath() + "/editor-layout.ini"); }
     void cleanup() { QFile::remove(QCoreApplication::applicationDirPath() + "/editor-layout.ini"); }
-    void ownedModulesUseGenericDocksAndReverseShutdown()
+    void ownedToolsUseGenericDocksAndReverseShutdown()
     {
         ForeignScene scene;
         EmptyAssets assets;
-        ModuleTrace trace;
+        ToolTrace trace;
         QPointer<QDockWidget> first, second;
         {
-            EditorWindow::ModuleList modules;
-            modules.push_back(std::make_unique<TrackedModule>(trace, "FirstTool"));
-            modules.push_back(std::make_unique<TrackedModule>(trace, "SecondTool"));
-            EditorWindow window(scene, assets, nullptr, nullptr, std::move(modules));
+            EditorWindow::ToolList tools;
+            tools.push_back(std::make_unique<TrackedTool>(trace, "FirstTool"));
+            tools.push_back(std::make_unique<TrackedTool>(trace, "SecondTool"));
+            EditorWindow window(scene, assets, nullptr, nullptr, std::move(tools));
             first = window.findChild<QDockWidget*>("FirstToolDock");
             second = window.findChild<QDockWidget*>("SecondToolDock");
             auto* assetsDock = window.findChild<QDockWidget*>("AssetsDock");
@@ -201,16 +239,16 @@ private slots:
             "Shutdown SecondTool", "Shutdown FirstTool"}));
     }
 
-    void initializationFailureUnwindsModulesWithLiveContext()
+    void initializationFailureUnwindsToolsWithLiveContext()
     {
         ForeignScene scene;
         EmptyAssets assets;
-        ModuleTrace trace;
-        EditorWindow::ModuleList modules;
-        modules.push_back(std::make_unique<TrackedModule>(trace, "FirstTool"));
-        modules.push_back(std::make_unique<TrackedModule>(trace, "FailingTool", true));
-        modules.push_back(std::make_unique<TrackedModule>(trace, "UnstartedTool"));
-        QVERIFY_EXCEPTION_THROWN(EditorWindow(scene, assets, nullptr, nullptr, std::move(modules)),
+        ToolTrace trace;
+        EditorWindow::ToolList tools;
+        tools.push_back(std::make_unique<TrackedTool>(trace, "FirstTool"));
+        tools.push_back(std::make_unique<TrackedTool>(trace, "FailingTool", true));
+        tools.push_back(std::make_unique<TrackedTool>(trace, "UnstartedTool"));
+        QVERIFY_EXCEPTION_THROWN(EditorWindow(scene, assets, nullptr, nullptr, std::move(tools)),
             std::runtime_error);
         QVERIFY(trace.contextAlive);
         QCOMPARE(trace.destroyed, 3);
@@ -218,26 +256,26 @@ private slots:
             "Shutdown FailingTool", "Shutdown FirstTool"}));
     }
 
-    void optionalModulesRestoreLayoutWithoutScriptCanvas()
+    void optionalToolsRestoreLayoutWithoutScriptCanvas()
     {
         ForeignScene scene;
         EmptyAssets assets;
         {
-            EditorWindow window(scene, assets, nullptr, nullptr, TestModules());
+            EditorWindow window(scene, assets, nullptr, nullptr, TestTools());
             window.findChild<QDockWidget*>("ScriptCanvasDock")->setFloating(true);
             window.findChild<QDockWidget*>("InspectorDock")->setFloating(true);
             window.findChild<QAction*>("SaveLayoutAction")->trigger();
         }
         {
-            EditorWindow window(scene, assets, nullptr, nullptr, TestModules(false));
+            EditorWindow window(scene, assets, nullptr, nullptr, TestTools(false));
             window.show();
             QVERIFY(QTest::qWaitForWindowExposed(&window));
             QVERIFY(!window.findChild<QDockWidget*>("ScriptCanvasDock"));
             QVERIFY(!window.findChild<QAction*>("OpenScriptCanvasAction"));
             QVERIFY(window.findChild<QDockWidget*>("InspectorDock")->isFloating());
             QVERIFY(window.findChild<QPlainTextEdit*>("ConsoleOutput"));
-            window.findChild<QAction*>("PlayAction")->trigger();
-            QVERIFY(window.findChild<QPlainTextEdit*>("ConsoleOutput")->toPlainText().contains("Play requested."));
+            QVERIFY(!window.findChild<QAction*>("PlayAction")->isEnabled());
+            QVERIFY(window.findChild<QAction*>("PlayAction")->toolTip().contains("Runtime unavailable"));
             window.findChild<QAction*>("ResetLayoutAction")->trigger();
             QVERIFY(window.tabifiedDockWidgets(window.findChild<QDockWidget*>("AssetsDock"))
                 .contains(window.findChild<QDockWidget*>("ConsoleDock")));
@@ -262,7 +300,7 @@ private slots:
         const auto name = QString::fromUtf8(u8"\u0430\u0441\u0441\u0435\u0442.lua");
         const auto path = QString("runtime://library/") + name;
         assets.assets = {{id, name.toUtf8().toStdString(), "Script", path.toUtf8().toStdString()}};
-        EditorWindow window(scene, assets, new QWidget, nullptr, TestModules());
+        EditorWindow window(scene, assets, new QWidget, nullptr, TestTools());
         auto* tree = window.findChild<QTreeWidget*>("AssetsTree");
         QVERIFY(tree);
         QCOMPARE(assets.refreshes, 1);
@@ -316,7 +354,7 @@ private slots:
         const auto second = scene.CreateObject("Second");
         scene.objects.at(first).transform = Transform{};
         scene.objects.at(second).transform = Transform{};
-        EditorWindow window(scene, assets, nullptr, nullptr, TestModules());
+        EditorWindow window(scene, assets, nullptr, nullptr, TestTools());
         window.RefreshScene(first);
         window.show();
         window.activateWindow();
@@ -364,7 +402,7 @@ private slots:
         EmptyAssets assets;
         const auto id = scene.CreateObject("Metadata object");
         auto* viewport = new ForeignViewport;
-        EditorWindow window(scene, assets, viewport, &scene, TestModules());
+        EditorWindow window(scene, assets, viewport, &scene, TestTools());
         window.PropertySections().RegisterEditor({"ForeignMetadata", "Metadata",
             [](ObjectId, PropertyGroupId, QWidget* parent) { return new QLabel("External properties", parent); },
             {}});
@@ -395,7 +433,7 @@ private slots:
         const auto id = scene.CreateObject("Spatial object");
         scene.objects.at(id).transform = Transform{};
         auto* viewport = new ForeignViewport;
-        EditorWindow window(scene, assets, viewport, nullptr, TestModules());
+        EditorWindow window(scene, assets, viewport, nullptr, TestTools());
         QVERIFY(!window.findChild<QAction*>("RotateToolAction")->isEnabled());
         window.RefreshScene(id);
         QVERIFY(!TransformCard(window)->isHidden());
@@ -433,7 +471,7 @@ private slots:
         EmptyAssets assets;
         auto* viewport = new ForeignViewport;
         viewport->transformTools = true;
-        EditorWindow window(scene, assets, viewport, nullptr, TestModules());
+        EditorWindow window(scene, assets, viewport, nullptr, TestTools());
         auto* move = window.findChild<QAction*>("MoveToolAction");
         auto* rotate = window.findChild<QAction*>("RotateToolAction");
         auto* scale = window.findChild<QAction*>("ScaleToolAction");
@@ -452,7 +490,7 @@ private slots:
         const auto id = scene.CreateObject("Changing object");
         scene.objects.at(id).transform = Transform{};
         auto* viewport = new ForeignViewport;
-        EditorWindow window(scene, assets, viewport, nullptr, TestModules());
+        EditorWindow window(scene, assets, viewport, nullptr, TestTools());
         window.RefreshScene(id);
         scene.objects.at(id).transform.reset();
         window.findChild<QDoubleSpinBox*>("PositionX")->setValue(3);
@@ -468,7 +506,7 @@ private slots:
     void plainWidgetNeedsNoViewportInterface() {
         ForeignScene scene;
         EmptyAssets assets;
-        EditorWindow window(scene, assets, new QWidget, nullptr, TestModules());
+        EditorWindow window(scene, assets, new QWidget, nullptr, TestTools());
         QVERIFY(!window.findChild<QAction*>("Mode2DAction")->isEnabled());
         QVERIFY(!window.findChild<QAction*>("Mode3DAction")->isEnabled());
         QVERIFY(!window.findChild<QToolButton*>("ViewportCameraButton")->isEnabled());
@@ -480,7 +518,7 @@ private slots:
         const auto id = scene.CreateObject("Deleted object");
         const auto survivor = scene.CreateObject("Survivor");
         auto* viewport = new ForeignViewport;
-        EditorWindow window(scene, assets, viewport, nullptr, TestModules());
+        EditorWindow window(scene, assets, viewport, nullptr, TestTools());
         window.RefreshScene(id);
         scene.DeleteObject(id);
         scene.expiredSnapshot.push_back(id); // Removed since the backend enumerated roots.
@@ -501,7 +539,7 @@ private slots:
         const auto second = scene.CreateObject("Second");
         const auto group = scene.AddPropertyGroup(first, "Comment");
         scene.SetCommentText(first, group, "Keep this note");
-        EditorWindow window(scene, assets, nullptr, &scene, TestModules());
+        EditorWindow window(scene, assets, nullptr, &scene, TestTools());
         RegisterCommentSection(window.PropertySections(), scene);
         window.RefreshScene(first);
         auto* oldText = window.findChild<QPlainTextEdit*>("CommentText");
@@ -519,7 +557,7 @@ private slots:
         ForeignScene scene;
         EmptyAssets assets;
         const auto id = scene.CreateObject("Object");
-        EditorWindow window(scene, assets, nullptr, &scene, TestModules());
+        EditorWindow window(scene, assets, nullptr, &scene, TestTools());
         window.PropertySections().RegisterEditor({"ForeignMetadata", "Metadata",
             [](ObjectId, PropertyGroupId, QWidget* parent) { return new QPlainTextEdit(parent); }, {}});
         window.RefreshScene(id);
@@ -550,7 +588,7 @@ private slots:
         const auto id = scene.CreateObject("Object");
         scene.groups.push_back({2, "ForeignMetadata", "Surviving properties"});
         bool removeDuringRefresh = false;
-        EditorWindow window(scene, assets, nullptr, &scene, TestModules());
+        EditorWindow window(scene, assets, nullptr, &scene, TestTools());
         window.PropertySections().RegisterEditor({"ForeignMetadata", "Metadata",
             [](ObjectId, PropertyGroupId group, QWidget* parent) {
                 auto* text = new QLineEdit(parent);
@@ -577,11 +615,11 @@ private slots:
         QCOMPARE(window.findChild<QLineEdit*>("ObjectName")->text(), QString("Object"));
     }
 
-    void missingModuleAndCorruptLayoutKeepShellUsable() {
+    void missingToolAndCorruptLayoutKeepShellUsable() {
         ForeignScene scene;
         EmptyAssets assets;
         {
-            EditorWindow window(scene, assets, nullptr, nullptr, TestModules());
+            EditorWindow window(scene, assets, nullptr, nullptr, TestTools());
             auto* external = new QDockWidget("External tool", &window);
             external->setObjectName("AbsentToolDock");
             window.addDockWidget(Qt::RightDockWidgetArea, external);
@@ -590,7 +628,7 @@ private slots:
             window.findChild<QAction*>("SaveLayoutAction")->trigger();
         }
         {
-            EditorWindow window(scene, assets, nullptr, nullptr, TestModules()); // Saved tool is no longer installed.
+            EditorWindow window(scene, assets, nullptr, nullptr, TestTools()); // Saved tool is no longer installed.
             QVERIFY(window.findChild<QDockWidget*>("InspectorDock")->isFloating());
             window.findChild<QAction*>("ResetLayoutAction")->trigger();
             QVERIFY(!window.findChild<QDockWidget*>("InspectorDock")->isFloating());
@@ -601,7 +639,7 @@ private slots:
         QSettings settings(QCoreApplication::applicationDirPath() + "/editor-layout.ini", QSettings::IniFormat);
         settings.setValue("window/layout", QByteArray("Corrupt layout"));
         settings.sync();
-        EditorWindow window(scene, assets, nullptr, nullptr, TestModules());
+        EditorWindow window(scene, assets, nullptr, nullptr, TestTools());
         QVERIFY(!window.findChild<QDockWidget*>("InspectorDock")->isFloating());
         QCOMPARE(window.dockWidgetArea(window.findChild<QDockWidget*>("SceneDock")), Qt::LeftDockWidgetArea);
     }
@@ -612,7 +650,7 @@ private slots:
         const auto id = scene.CreateObject("Object");
         scene.groups.push_back({2, "ForeignMetadata", "Live properties"});
         auto* viewport = new ForeignViewport;
-        EditorWindow window(scene, assets, viewport, &scene, TestModules());
+        EditorWindow window(scene, assets, viewport, &scene, TestTools());
         window.PropertySections().RegisterEditor({"ForeignMetadata", "Metadata",
             [&scene](ObjectId, PropertyGroupId group, QWidget* parent) -> QWidget* {
                 if (group == 1) {
