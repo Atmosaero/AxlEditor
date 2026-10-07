@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/icons">
+    <file alias="components/comment.svg">icons/components/comment.svg</file>
+  </qresource>
+</RCC>

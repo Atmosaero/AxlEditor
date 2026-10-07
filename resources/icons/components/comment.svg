@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <title>Comment</title>
+  <g stroke="#dce5f0" stroke-width="2" stroke-linecap="round">
+    <rect x="4" y="4" width="24" height="24" rx="3"/>
+    <path d="M9 11h14 M9 16h14 M9 21h9"/>
+  </g>
+</svg>
