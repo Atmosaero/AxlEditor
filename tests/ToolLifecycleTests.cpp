@@ -179,6 +179,9 @@ private slots:
         auto* dock = tool.Dock();
         QVERIFY(dock && dock->isHidden());
         QCOMPARE(dock->objectName(), QString("ScriptCanvasDock"));
+        QVERIFY(dock->isFloating());
+        QVERIFY(dock->features().testFlag(QDockWidget::DockWidgetFloatable));
+        QVERIFY(dock->features().testFlag(QDockWidget::DockWidgetMovable));
         tool.Initialize(host.context);
         QCOMPARE(tool.Dock(), dock);
         QCOMPARE(host.tools->actions().size(), 1);

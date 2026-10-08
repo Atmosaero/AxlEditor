@@ -8,6 +8,9 @@ void ScriptCanvasTool::Initialize(EditorContext& context)
 {
     if (dock_) return;
     dock_ = new QDockWidget("Script Canvas");
+    dock_->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    dock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    dock_->setProperty("keepDockTitleBar", true);
     auto* view = new ScriptCanvasView;
     auto* panel = new QWidget; auto* layout = new QVBoxLayout(panel);
     layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(0);
@@ -15,6 +18,9 @@ void ScriptCanvasTool::Initialize(EditorContext& context)
     auto* title = new QLabel(toolbar); toolbar->addWidget(title);
     layout->addWidget(toolbar); layout->addWidget(view, 1); dock_->setWidget(panel);
     if (!context.RegisterDock("ScriptCanvasDock", dock_.data(), Qt::BottomDockWidgetArea)) { Shutdown(); return; }
+    dock_->hide();
+    dock_->setFloating(true);
+    dock_->resize(900, 600);
     document_ = new GraphDocument(*view, context, *title);
     context.RegisterService<GraphDocument>(*document_);
     QObject::connect(document_, &QObject::destroyed, panel, [&context] {
@@ -24,7 +30,6 @@ void ScriptCanvasTool::Initialize(EditorContext& context)
     QObject::connect(fresh, &QAction::triggered, document_, [doc = document_.data()] { doc->New(); });
     QObject::connect(load, &QAction::triggered, document_, [doc = document_.data()] { doc->OpenDialog(); });
     QObject::connect(save, &QAction::triggered, document_, [doc = document_.data()] { doc->Save(); });
-    dock_->hide();
     auto* open = new QAction("Script Canvas", dock_.data());
     open->setObjectName("OpenScriptCanvasAction");
     QObject::connect(open, &QAction::triggered, dock_.data(), [dock = dock_.data(), view] {

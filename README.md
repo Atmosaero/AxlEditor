@@ -4,7 +4,7 @@ A small, extensible editor built with C++17 and Qt Widgets. Axl brings together
 scene selection, an Inspector, a 2D/3D viewport and independent editor tools,
 with replaceable providers for engine-specific data.
 
-![Axl Editor with the reference 3D viewport, rotation gizmo and dockable panels](docs/screenshots/axl-editor.png)
+![Axl Editor with transform tool icons, Inspector component cards and a floating Script Canvas window](docs/screenshots/axl-editor.png)
 
 ## Features
 
@@ -125,6 +125,11 @@ the executable. **View -> Save Layout** and **Reset Layout** are also available.
 
 Open **Tools -> Script Canvas**, then right-click the canvas and choose
 **Add Node -> Start** or **Print**. Nodes can be selected, dragged and deleted.
+With the default layout, Script Canvas opens as a separate floating window.
+Drag its title bar to dock it in the editor; the dock title bar retains its
+undock button so it can be detached again. The saved layout remembers your choice.
+Use **View -> Reset Layout** to restore the floating default if an older layout
+has Script Canvas docked at the bottom.
 Drag an output execution pin to an input pin to create a connection; select a
 connection and press **Delete** to remove it. **Escape** cancels a pending connection.
 
@@ -223,7 +228,7 @@ They do not require an ECS, a Node hierarchy implementation or Qt math types.
   Choose tools in `main.cpp` and move the list into `EditorWindow`. The shell
   initializes them before layout restoration and shuts them down in reverse order
   with the context still alive. Passing an empty list creates a shell without tools.
-  Bottom-area docks are tabified with Assets by their Qt area, regardless of tool name.
+  Non-floating bottom-area docks are tabified with Assets by their Qt area, regardless of tool name.
   The shell logs through `IEditorLog`; ConsoleTool supplies the optional service.
 
 ### Console commands

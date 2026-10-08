@@ -3,11 +3,13 @@
 #include "Tools/Console/EditorConsole.h"
 #include "Tools/Console/ConsoleTool.h"
 #include "Tools/ScriptCanvas/ScriptCanvasTool.h"
+#include "Tools/ScriptCanvas/ScriptCanvasView.h"
 #include "Editor/Qt/IEditorViewport.h"
 #include "Editor/Qt/InspectorProperties.h"
 #include "Reference/Scene/ReferenceSceneProvider.h"
 #include "Reference/Qt/CommentSection.h"
 #include <QAction>
+#include <QAbstractButton>
 #include <QDoubleSpinBox>
 #include <QDockWidget>
 #include <QGroupBox>
@@ -237,6 +239,61 @@ private slots:
         QCOMPARE(trace.destroyed, 2);
         QCOMPARE(trace.calls, QStringList({"Initialize FirstTool", "Initialize SecondTool",
             "Shutdown SecondTool", "Shutdown FirstTool"}));
+    }
+
+    void scriptCanvasFloatsByDefaultCanDockAndDetachAndRestoresLayout()
+    {
+        ForeignScene scene;
+        EmptyAssets assets;
+        {
+            EditorWindow window(scene, assets, nullptr, nullptr, TestTools());
+            auto* dock = window.findChild<QDockWidget*>("ScriptCanvasDock");
+            auto* assetsDock = window.findChild<QDockWidget*>("AssetsDock");
+            QVERIFY(dock->isFloating());
+            QVERIFY(!window.tabifiedDockWidgets(assetsDock).contains(dock));
+            window.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&window));
+            window.findChild<QAction*>("OpenScriptCanvasAction")->trigger();
+            QTRY_VERIFY(dock->isVisible());
+            QCOMPARE(dock->window(), static_cast<QWidget*>(dock));
+            auto* view = dynamic_cast<ScriptCanvasView*>(window.findChild<QGraphicsView*>("ScriptCanvasView"));
+            QVERIFY(view);
+            view->EditGraph("Add node", [](auto& graph) { graph.AddNode(ScriptGraph::NodeType::Start, {20, 30}); });
+            dock->activateWindow(); view->setFocus();
+            QTRY_VERIFY(view->hasFocus());
+            QTest::keyClick(view, Qt::Key_Z, Qt::ControlModifier);
+            QTRY_VERIFY(view->GraphData().Nodes().empty());
+            window.findChild<QAction*>("RedoAction")->trigger();
+            QCOMPARE(view->GraphData().Nodes().size(), std::size_t{1});
+            dock->setFloating(false);
+            window.tabifyDockWidget(assetsDock, dock);
+            dock->show(); dock->raise(); window.activateWindow();
+            QVERIFY(QTest::qWaitForWindowActive(&window));
+            QTRY_VERIFY(!dock->titleBarWidget());
+            auto* floatButton = dock->findChild<QAbstractButton*>("qt_dockwidget_floatbutton");
+            QVERIFY(floatButton);
+            QTRY_VERIFY(floatButton->isVisible());
+            QTest::mouseClick(floatButton, Qt::LeftButton);
+            QTRY_VERIFY(dock->isFloating());
+            QCOMPARE(view->GraphData().Nodes().size(), std::size_t{1});
+            window.findChild<QAction*>("SaveLayoutAction")->trigger();
+        }
+        {
+            EditorWindow window(scene, assets, nullptr, nullptr, TestTools());
+            auto* dock = window.findChild<QDockWidget*>("ScriptCanvasDock");
+            QVERIFY(dock->isFloating()); // A detached window survives restart.
+            dock->setFloating(false);
+            window.tabifyDockWidget(window.findChild<QDockWidget*>("AssetsDock"), dock);
+            window.findChild<QAction*>("SaveLayoutAction")->trigger();
+        }
+        {
+            EditorWindow window(scene, assets, nullptr, nullptr, TestTools());
+            auto* dock = window.findChild<QDockWidget*>("ScriptCanvasDock");
+            QVERIFY(!dock->isFloating()); // An explicit docking choice is also restored.
+            QVERIFY(!dock->titleBarWidget());
+            window.findChild<QAction*>("ResetLayoutAction")->trigger();
+            QVERIFY(dock->isFloating());
+        }
     }
 
     void initializationFailureUnwindsToolsWithLiveContext()

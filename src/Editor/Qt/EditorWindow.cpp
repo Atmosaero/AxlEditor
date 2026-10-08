@@ -199,7 +199,7 @@ EditorWindow::EditorWindow(ISceneProvider& scene, IAssetProvider& assets, QWidge
             }));
     }
     for (auto* dock : findChildren<QDockWidget*>(QString(), Qt::FindDirectChildrenOnly))
-        if (dock != assetsDock_ && dockWidgetArea(dock) == Qt::BottomDockWidgetArea)
+        if (dock != assetsDock_ && !dock->isFloating() && dockWidgetArea(dock) == Qt::BottomDockWidgetArea)
             tabifyDockWidget(assetsDock_, dock);
     assetsDock_->raise();
     ApplyDefaultDockSizes();
@@ -333,7 +333,7 @@ void EditorWindow::UpdateBottomDockTitles()
 {
     for (auto* dock : findChildren<QDockWidget*>(QString(), Qt::FindDirectChildrenOnly)) {
         if (!dock) continue;
-        if (!dock->isFloating() && dockWidgetArea(dock) == Qt::BottomDockWidgetArea
+        if (!dock->isFloating() && !dock->property("keepDockTitleBar").toBool() && dockWidgetArea(dock) == Qt::BottomDockWidgetArea
             && !tabifiedDockWidgets(dock).isEmpty()) {
             if (!dock->titleBarWidget()) {
                 auto* title = new QWidget(dock);
