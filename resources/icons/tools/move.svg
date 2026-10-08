@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <title>Move</title>
+  <g stroke="#dce5f0" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v18 M3 12h18"/>
+    <path d="m9 6 3-3 3 3 M9 18l3 3 3-3 M6 9l-3 3 3 3 M18 9l3 3-3 3"/>
+  </g>
+</svg>

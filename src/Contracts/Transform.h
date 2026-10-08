@@ -1,6 +1,4 @@
 #pragma once
-
-// Editor-facing data; no dependency on Qt or an engine math library.
 struct Vec3
 {
     float x = 0, y = 0, z = 0;
@@ -10,10 +8,9 @@ struct Vec3
     bool operator==(const Vec3& other) const { return x == other.x && y == other.y && z == other.z; }
 };
 
-// Shared editor data; no dependency on Entity or a particular scene/runtime.
 struct Transform
 {
     Vec3 position{0.0f, 0.0f, 0.0f};
-    Vec3 rotation{0.0f, 0.0f, 0.0f}; // Degrees, local X then Y then Z.
+    Vec3 rotation{0.0f, 0.0f, 0.0f};
     Vec3 scale{1.0f, 1.0f, 1.0f};
 };

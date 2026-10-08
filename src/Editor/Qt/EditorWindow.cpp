@@ -682,13 +682,22 @@ void EditorWindow::CreateActions()
     auto* transformTools = new QActionGroup(this);
     transformTools->setExclusive(true);
     const QString toolNames[] = {"Move", "Rotate", "Scale"};
+    const QString toolIcons[] = {":/icons/tools/move.svg", ":/icons/tools/rotate.svg", ":/icons/tools/scale.svg"};
+    const QString toolTips[] = {"Move: translate along an axis", "Rotate: rotate around an axis", "Scale: resize along an axis"};
     const TransformTool tools[] = {TransformTool::Move, TransformTool::Rotate, TransformTool::Scale};
     auto* editorViewport = dynamic_cast<IEditorViewport*>(viewport_);
     std::array<QAction*, 3> toolActions;
     for (int index = 0; index < 3; ++index) {
-        auto* action = sceneToolbar_->addAction(toolNames[index]);
+        auto* action = sceneToolbar_->addAction(QIcon(toolIcons[index]), toolNames[index]);
         toolActions[index] = action;
         action->setObjectName(toolNames[index] + "ToolAction");
+        action->setToolTip(toolTips[index]);
+        auto* button = qobject_cast<QToolButton*>(sceneToolbar_->widgetForAction(action));
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        button->setIconSize(QSize(20, 20));
+        button->setFixedSize(30, 30);
+        button->setProperty("transformTool", true);
+        button->setAccessibleName(toolNames[index]);
         action->setCheckable(true);
         action->setChecked(tools[index] == (editorViewport ? editorViewport->ActiveTransformTool() : TransformTool::Move));
         action->setEnabled(editorViewport && editorViewport->SupportsTransformTools());

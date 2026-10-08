@@ -1,5 +1,8 @@
 <RCC>
   <qresource prefix="/icons">
     <file alias="components/comment.svg">icons/components/comment.svg</file>
+    <file alias="tools/move.svg">icons/tools/move.svg</file>
+    <file alias="tools/rotate.svg">icons/tools/rotate.svg</file>
+    <file alias="tools/scale.svg">icons/tools/scale.svg</file>
   </qresource>
 </RCC>

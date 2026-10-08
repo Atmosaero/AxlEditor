@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <title>Scale</title>
+  <g stroke="#dce5f0" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="15" width="5" height="5" rx=".5"/>
+    <path d="M9 15 20 4 M13 4h7v7"/>
+  </g>
+</svg>

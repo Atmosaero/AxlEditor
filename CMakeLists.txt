@@ -49,6 +49,7 @@ qt_add_executable(AxlEditor WIN32
     src/Reference/Qt/ReferenceAssetProvider.h src/Reference/Qt/CommentSection.h
     src/Reference/Assets/AssetCatalog.h src/Reference/Qt/AssetLinkSection.h
     src/Reference/Qt/SceneDocument.h src/Reference/Qt/SceneCodec.h
+    src/Reference/Qt/StartupCommands.h src/Reference/Qt/StartupCommands.cpp
 
     # Editor tools.
     src/Editor/Qt/InspectorProperties.h src/Tools/Console/EditorConsole.h
@@ -190,6 +191,24 @@ if(AXL_BUILD_TESTS)
     endif()
 
     # Native GUI input checks need exclusive focus, even with ctest --parallel.
+    qt_add_executable(AxlStartupCommandTests
+        ${EDITOR_ICON_SOURCES} tests/StartupCommandTests.cpp
+        src/Reference/Qt/StartupCommands.cpp
+        src/Editor/Qt/EditorWindow.cpp src/Editor/Qt/EditorTheme.cpp
+        src/Editor/Qt/ConsoleCommands.cpp src/Editor/Qt/IEditorViewport.h)
+    target_include_directories(AxlStartupCommandTests PRIVATE src)
+    target_compile_features(AxlStartupCommandTests PRIVATE cxx_std_17)
+    target_link_libraries(AxlStartupCommandTests PRIVATE Qt6::Widgets Qt6::Test)
+    target_compile_definitions(AxlStartupCommandTests PRIVATE AXL_EDITOR_EXECUTABLE="$<TARGET_FILE:AxlEditor>")
+    add_dependencies(AxlStartupCommandTests AxlEditor)
+    set_target_properties(AxlStartupCommandTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/startup-tests")
+    add_test(NAME editor_startup_commands COMMAND AxlStartupCommandTests
+        -o "${CMAKE_CURRENT_BINARY_DIR}/startup-tests/startup-commands.txt,txt")
+    set_tests_properties(editor_startup_commands PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
+    if(WIN32)
+        set_tests_properties(editor_startup_commands PROPERTIES ENVIRONMENT "QT_PLUGIN_PATH=${QT_BIN_DIR}/../plugins")
+    endif()
+
     set_tests_properties(editor_backend_boundaries editor_viewport_input editor_script_canvas editor_console_commands PROPERTIES RUN_SERIAL TRUE)
     if(WIN32)
         # The boundary executable lives below build/ for layout isolation; use

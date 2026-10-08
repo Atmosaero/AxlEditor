@@ -46,6 +46,27 @@ The script initializes the MSVC environment, builds a Release executable with Ni
 and deploys the Qt runtime into `build/`. Omit `-Run` to build without launching.
 Without `-QtRoot`, it uses `.tools/Qt/6.12.0/msvc2022_64`.
 
+### Startup arguments
+
+```powershell
+.\build\AxlEditor.exe --create-project 'D:\Projects\My Game'
+.\build\AxlEditor.exe --open-project 'D:\Projects\My Game'
+.\build\AxlEditor.exe --open-scene 'D:\Projects\My Game\Assets\main.axl'
+.\build\AxlEditor.exe --open-project 'D:\Projects\My Game' --open-scene 'Assets/main.axl'
+```
+
+Creating a project makes a new directory with an empty `Assets/` folder and opens
+an untitled scene. Existing destinations are rejected without overwriting files.
+Project paths are resolved against the working directory; a relative scene path
+uses the specified project directory, or the working directory when no project
+argument is supplied. Quote paths containing spaces. A scene can be opened on
+its own without selecting a project. Project creation/opening happens before
+scene opening regardless of option order; the two project options are mutually
+exclusive. Scene data is validated before folders or the current session change.
+`--help` and `--version` print usage/version and exit. Invalid arguments, missing
+paths or invalid scenes print an error and exit with code 2 without opening the
+editor window. A normal launch and a clean application close use exit code 0.
+
 Use **File -> Open Project** to select a folder. The reference browser scans its
 `Assets/` subfolder recursively; a missing/empty folder is supported. Try the
 included `Example/` project and open `Assets/example.axl` and `Assets/flow.axlgraph`.
@@ -298,7 +319,7 @@ $env:PATH = 'C:\Qt\6.12.0\msvc2022_64\bin;' + $env:PATH
 ctest --test-dir build --output-on-failure
 ```
 
-The eleven test targets cover:
+The twelve test targets cover:
 
 - Scene contracts and neutral graph/catalog/operation/gesture rules compiled without Qt.
 - Reference asset scans, UTF-8 paths, extension types, stable IDs and missing files.
@@ -315,6 +336,8 @@ The eleven test targets cover:
   marks, subtree/property restoration, generation guards and project relocation.
 - The integrated Qt/OpenGL workflow: Inspector/picker, independent Save/Undo routing,
   close cancellation for both documents, text focus and closing during a viewport drag.
+- Startup project creation/opening and scene opening, argument validation, paths with
+  spaces/Unicode, safe failures, help/version output and launching the actual executable.
 
 GUI tests require a desktop session and run serially to preserve input focus.
 Viewport tests use the real OpenGL widget. Boundary-test layout files are isolated
