@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/python-console">
+    <file alias="worker.py">python/console_worker.py</file>
+  </qresource>
+</RCC>

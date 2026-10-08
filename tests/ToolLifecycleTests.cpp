@@ -4,6 +4,7 @@
 #include "Tools/ScriptCanvas/ScriptCanvasTool.h"
 #include <QMenuBar>
 #include <QRegularExpression>
+#include <QToolButton>
 #include <QtTest>
 
 namespace {
@@ -73,12 +74,15 @@ private slots:
         QCOMPARE(tool.Dock(), firstDock);
         QCOMPARE(host.window.findChildren<QDockWidget*>().size(), 1);
         QCOMPARE(host.view->actions().size(), 1);
-        QCOMPARE(host.tools->actions().size(), 1);
+        QVERIFY(host.tools->actions().isEmpty());
+        auto* clearButton = firstDock->findChild<QToolButton*>("ClearConsoleButton");
+        QVERIFY(clearButton && !clearButton->icon().isNull());
+        QCOMPARE(clearButton->toolButtonStyle(), Qt::ToolButtonIconOnly);
         console->Log(ConsoleMessageType::Info, "test");
-        host.tools->actions().front()->trigger();
+        clearButton->click();
         QVERIFY(console->toPlainText().isEmpty());
         QPointer<QDockWidget> dockGuard = firstDock;
-        QPointer<QAction> actionGuard = host.tools->actions().front();
+        QPointer<QAction> actionGuard = clearButton->defaultAction();
         tool.Shutdown(); tool.Shutdown();
         QVERIFY(!dockGuard && !actionGuard && !tool.Dock());
         QVERIFY(!host.context.GetService<EditorConsole>());

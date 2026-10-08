@@ -26,8 +26,10 @@ find_package(Qt6 6.12 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg)
 
 qt_standard_project_setup()
 qt_add_resources(EDITOR_ICON_SOURCES resources/editor-icons.qrc)
+qt_add_resources(PYTHON_CONSOLE_SOURCES resources/python-console.qrc)
 qt_add_executable(AxlEditor WIN32
     ${EDITOR_ICON_SOURCES}
+    ${PYTHON_CONSOLE_SOURCES}
     # Bootstrap and editor shell.
     src/main.cpp
     src/Editor/Qt/EditorWindow.h src/Editor/Qt/EditorWindow.cpp
@@ -50,10 +52,13 @@ qt_add_executable(AxlEditor WIN32
     src/Reference/Assets/AssetCatalog.h src/Reference/Qt/AssetLinkSection.h
     src/Reference/Qt/SceneDocument.h src/Reference/Qt/SceneCodec.h
     src/Reference/Qt/StartupCommands.h src/Reference/Qt/StartupCommands.cpp
+    src/Reference/Qt/PythonEditorCommands.h src/Reference/Qt/PythonEditorCommands.cpp
 
     # Editor tools.
     src/Editor/Qt/InspectorProperties.h src/Tools/Console/EditorConsole.h
     src/Tools/Console/ConsoleTool.h src/Tools/Console/ConsoleTool.cpp
+    src/Tools/PythonConsole/PythonConsoleTool.h src/Tools/PythonConsole/PythonConsoleTool.cpp
+    src/Tools/PythonConsole/PythonCommands.h src/Tools/PythonConsole/PythonCommands.cpp
     src/Tools/ScriptCanvas/ScriptCanvasTool.h src/Tools/ScriptCanvas/ScriptCanvasTool.cpp
     src/Tools/ScriptCanvas/ScriptCanvasView.h src/Tools/ScriptCanvas/ScriptCanvasView.cpp
     src/Tools/ScriptCanvas/ScriptGraph.h
@@ -90,6 +95,28 @@ if(AXL_BUILD_TESTS)
     target_compile_features(AxlAssetProviderTests PRIVATE cxx_std_17)
     target_link_libraries(AxlAssetProviderTests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME reference_asset_provider COMMAND AxlAssetProviderTests)
+    # Python is an optional runtime interpreter, not a Qt/C++ build dependency.
+    find_program(AXL_PYTHON_EXECUTABLE NAMES python python3)
+    qt_add_executable(AxlPythonConsoleTests
+        ${EDITOR_ICON_SOURCES} ${PYTHON_CONSOLE_SOURCES}
+        tests/PythonConsoleTests.cpp
+        src/Tools/PythonConsole/PythonConsoleTool.h src/Tools/PythonConsole/PythonConsoleTool.cpp
+        src/Tools/PythonConsole/PythonCommands.cpp src/Reference/Qt/PythonEditorCommands.cpp
+        src/Editor/Qt/EditorWindow.cpp src/Editor/Qt/EditorTheme.cpp
+        src/Editor/Qt/IEditorViewport.h src/Editor/Qt/ConsoleCommands.cpp
+        src/Tools/Console/ConsoleTool.cpp)
+    target_include_directories(AxlPythonConsoleTests PRIVATE src)
+    target_compile_features(AxlPythonConsoleTests PRIVATE cxx_std_17)
+    target_link_libraries(AxlPythonConsoleTests PRIVATE Qt6::Widgets Qt6::Test)
+    if(AXL_PYTHON_EXECUTABLE)
+        target_compile_definitions(AxlPythonConsoleTests PRIVATE AXL_TEST_PYTHON="${AXL_PYTHON_EXECUTABLE}")
+    endif()
+    set_target_properties(AxlPythonConsoleTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/python-tests")
+    add_test(NAME editor_python_console COMMAND AxlPythonConsoleTests -o "${CMAKE_CURRENT_BINARY_DIR}/python-tests/python-console.txt,txt")
+    set_tests_properties(editor_python_console PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
+    if(WIN32)
+        set_tests_properties(editor_python_console PROPERTIES ENVIRONMENT "QT_PLUGIN_PATH=${QT_BIN_DIR}/../plugins")
+    endif()
     qt_add_executable(AxlToolLifecycleTests
         tests/ToolLifecycleTests.cpp
         src/Tools/Console/ConsoleTool.h src/Tools/Console/ConsoleTool.cpp

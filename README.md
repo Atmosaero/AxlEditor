@@ -20,6 +20,7 @@ with replaceable providers for engine-specific data.
 - Provider-based asset search, type filtering, a metadata picker, image preview and document opening.
 - Console messages for information, warnings, errors and success.
 - Console command input, history and scoped registration from any C++ class.
+- A Python Console tool with persistent Python sessions, script files and 44 editor automation commands.
 - A separate Script Canvas tool with Start/Print nodes, execution pins and Bezier connections.
 - A minimal dark theme and a centered Play/Stop toolbar.
 
@@ -145,6 +146,88 @@ Save (`Ctrl+S`), Save As and Undo/Redo route to the document containing the focu
 editor; graph edits never enter the scene history. Close checks both dirty documents.
 After restarting, open the saved graph to restore nodes, pin IDs, wires and positions.
 
+### Python Console
+
+Open **Tools -> Python Console**. Enter a multiline script and use **Run** or
+**Ctrl+Enter**. The final expression is displayed like a Python REPL; variables
+and imports survive between runs. **Run File** executes a UTF-8 `.py` file,
+**Recent scripts** recalls up to 30 inputs, and **Clear Output** clears the log.
+Stdout, stderr and tracebacks appear in the output pane. **Stop** interrupts the
+worker process; **Reset Session** also clears its Python namespace. Completed
+editor edits remain in the scene and can be undone.
+
+Install Python 3.10 or newer separately. The tool checks `AXL_PYTHON`, its saved
+interpreter choice, then `python` / `python3` in `PATH`. Use **Interpreter...** to
+select the executable if necessary. The choice is saved in `python-console.ini`
+beside the editor. Python is optional: the editor builds and runs without it,
+and the tool reports an unavailable interpreter when Run is pressed.
+
+```powershell
+$env:AXL_PYTHON = 'C:\Python311\python.exe'
+.\build\AxlEditor.exe
+```
+
+The tool provides the `axl` module (also available through `import axl`).
+Run `axl.commands()` to list registered functions, or `help(axl.set_transform)`
+to inspect a signature and description. These 44 commands interact with the
+current editor; they do not start a gameplay scripting runtime.
+
+| Commands | Effect |
+| --- | --- |
+| `objects()`, `roots()`, `children(object)`, `parent(object)` | Browse the hierarchy. |
+| `create(name='Object', parent=None)`, `delete(object)`, `rename(object, name)` | Edit objects through shared editor operations. |
+| `name(object)`, `find(name)` | Read a name or find all exact matches. |
+| `select(object=None)`, `selected()` | Update/read editor selection; `None` clears it. |
+| `transform(object)`, `set_transform(object, position=None, rotation=None, scale=None)` | Read/edit local Transform lists `[x, y, z]`. |
+| `position(object)`, `rotation(object)`, `scale(object)` | Read individual local Transform vectors. |
+| `set_position(object, x, y, z)`, `set_rotation(object, x, y, z)`, `set_scale(object, x, y, z)` | Edit a vector; rotation uses degrees. |
+| `translate(object, x, y, z)` | Add an offset to local position. |
+| `comment(object)`, `set_comment(object, text)`, `remove_comment(object)` | Read, add/update or remove reference Comment. |
+| `scene_new()`, `scene_open(path)`, `scene_save(path=None)` | Use existing scene document operations and unsaved-change prompts. Untitled scenes require a save path. |
+| `project_open(path)`, `project_info()` | Open an existing project folder or read project/scene metadata and dirty state. |
+| `assets()`, `asset(id)`, `assets_refresh()`, `asset_open(id)` | Browse provider metadata, refresh Assets or invoke a registered opening handler. |
+| `undo()`, `redo()`, `history()` | Operate on scene history, independent of Script Canvas focus. |
+| `frame_selected()`, `viewport_mode(mode=None)` | Frame selection; read or set camera mode to `'2d'` / `'3d'`. |
+| `docks()`, `dock_show(name)`, `dock_hide(name)`, `dock_float(name, floating=True)` | Control docks using their stable object names. |
+| `layout_save()`, `layout_reset()` | Save or reset the existing dock layout. |
+| `log(message, level='info')` | Write an info / warning / error / success message to the editor Console. |
+
+For example, create a row of objects, edit their properties and select one:
+
+```python
+import axl
+
+root = axl.create('Generated')
+for i in range(5):
+    cube = axl.create(f'Cube {i}', parent=root)
+    axl.set_position(cube, i * 2, 0, 0)
+    axl.set_comment(cube, f'Created by Python: {i}')
+
+axl.select(cube)
+axl.frame_selected()
+axl.log('Created five cubes', level='success')
+# axl.scene_save('Assets/generated.axl')  # Relative to the open project.
+```
+
+Object results are session-scoped `axl.Object` handles. They carry exact 64-bit
+IDs and a scene generation; accessing a handle after New/Open/Project Open is
+rejected. Deleted objects are rejected until restored through Undo. Asset IDs
+are decimal strings and are only valid for the provider's current session.
+Returned lists/dictionaries are snapshots, not another live world. Raw object
+IDs are also accepted and refer to the current scene. Scene paths are relative
+to the project root (or working directory with no project); project paths are
+relative to the working directory. `asset_open` reports whether a handler was
+available, rather than guaranteeing that the handler opened a document.
+
+Python runs in one persistent child process, while editor API calls are dispatched
+on the Qt thread. A long Python loop leaves the UI responsive and can be stopped.
+API calls are supported on the console execution thread; Python background threads
+may perform computation but cannot call `axl` editor functions. Errors become
+`axl.EditorError` or normal Python tracebacks. Each completed scene edit has its
+own Undo step; a script is not an atomic transaction and a later error does not
+roll back earlier edits. Document prompts still require the user's decision.
+`input()` is unavailable; use script variables or the editor UI.
+
 ## Projects and documents
 
 A new launch starts with **No project** and an empty untitled scene. Select a
@@ -191,10 +274,11 @@ src/
   Tools/
     Console/                       ConsoleTool and EditorConsole
     ScriptCanvas/                  Tool lifecycle, neutral graph model, Qt view, graph document/codec
+    PythonConsole/                 Dock UI, optional Python process and owner-scoped command registry
   Reference/
     Scene/                         Neutral Scene and ReferenceSceneProvider
     Assets/                        Neutral AssetCatalog (classification and session IDs)
-    Qt/                            Scan adapter, scene codec/document, Comment/Asset Link editors
+    Qt/                            Scan adapter, scene codec/document, property editors and Python API bindings
       Viewport/                    GL widget, projected handle geometry and gizmo painting
 ```
 
@@ -234,7 +318,8 @@ They do not require an ECS, a Node hierarchy implementation or Qt math types.
 ### Console commands
 
 Type a command in the Console input and press **Enter**. **Up/Down** navigate
-the last 100 commands and preserve an unfinished draft. Built-in commands:
+the last 100 commands and preserve an unfinished draft. The eraser button to the
+right of the command input clears the Console output. Built-in commands:
 
 ```text
 help
@@ -284,6 +369,36 @@ inside `Tools/ScriptCanvas/ScriptCanvasView.cpp`, with pin handles registered
 explicitly by `PinId`. `ScriptCanvasTool.cpp` contains only registration and lifecycle.
 The tool is independent of `ISceneProvider` and runtime scripting.
 
+### Registering Python commands
+
+The Python tool itself does not depend on reference scene/document classes.
+`Reference/Qt/PythonEditorCommands.cpp` binds the reference application in
+`main.cpp`; providers, `EditorOperations`, document history and existing viewport
+controls remain the sources of editor behavior. An external backend can replace
+these bindings and register its own functions through the public tool header:
+
+```cpp
+#include "Tools/PythonConsole/PythonCommands.h"
+#include "Editor/Qt/EditorContext.h"
+
+// After PythonConsoleTool initializes. owner is a QObject belonging to your adapter.
+if (auto* commands = context.GetService<PythonCommands>()) {
+    commands->RegisterCommand("my_tool", "Example extension", {"value"},
+        {{"value", 1}}, owner, [](const QJsonObject& args) -> QJsonValue {
+            return args["value"]; // Replace with editor operations.
+        });
+}
+```
+
+Callbacks receive bound positional/keyword arguments, including registered
+defaults, and return JSON-compatible values. Required parameters must precede
+optional ones; unknown, duplicate or missing arguments are rejected. Duplicate
+live names are rejected. QObject ownership guards callback lifetime; call
+`Unregister(owner)` during adapter shutdown before releasing captured state.
+Destroying an owner or the Python dock makes its registrations unavailable.
+The function list refreshes before every execution, so extensions appear in
+`axl.commands()` and Python `help()` without restarting the process.
+
 ### Ownership and refresh
 
 Providers and non-QObject services must outlive their consumers. The service
@@ -324,7 +439,7 @@ $env:PATH = 'C:\Qt\6.12.0\msvc2022_64\bin;' + $env:PATH
 ctest --test-dir build --output-on-failure
 ```
 
-The twelve test targets cover:
+The thirteen test targets cover:
 
 - Scene contracts and neutral graph/catalog/operation/gesture rules compiled without Qt.
 - Reference asset scans, UTF-8 paths, extension types, stable IDs and missing files.
@@ -343,6 +458,15 @@ The twelve test targets cover:
   close cancellation for both documents, text focus and closing during a viewport drag.
 - Startup project creation/opening and scene opening, argument validation, paths with
   spaces/Unicode, safe failures, help/version output and launching the actual executable.
+- Real Python execution, persistent state, all 44 automation functions, live Inspector
+  updates, scene Undo/Redo, script errors, invalid arguments, exact large IDs, stale
+  handles, command-owner retirement, missing interpreters, dock lifetime, keyboard
+  execution and stopping/restarting an infinite loop while Qt remains responsive.
+
+Python tests discover an interpreter at configure time (`AXL_PYTHON_EXECUTABLE`
+can be specified explicitly). With no interpreter, execution checks are reported
+as skipped; registry/lifecycle checks still run. The report is written to
+`build/python-tests/python-console.txt`.
 
 GUI tests require a desktop session and run serially to preserve input focus.
 Viewport tests use the real OpenGL widget. Boundary-test layout files are isolated

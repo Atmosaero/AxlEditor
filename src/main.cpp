@@ -9,6 +9,8 @@
 #include "Reference/Qt/Viewport/ReferenceViewport.h"
 #include "Tools/Console/ConsoleTool.h"
 #include "Tools/ScriptCanvas/ScriptCanvasTool.h"
+#include "Tools/PythonConsole/PythonConsoleTool.h"
+#include "Reference/Qt/PythonEditorCommands.h"
 #include <QApplication>
 #include <QSurfaceFormat>
 #include <QTextStream>
@@ -68,10 +70,12 @@ int main(int argc, char* argv[])
     EditorWindow::ToolList tools;
     tools.push_back(std::make_unique<ConsoleTool>());
     tools.push_back(std::make_unique<ScriptCanvasTool>());
+    tools.push_back(std::make_unique<PythonConsoleTool>());
     EditorWindow window(scene, assets, viewport, &scene, std::move(tools));
     RegisterCommentSection(window.PropertySections(), scene);
     SceneDocument document(window, scene, assets);
     RegisterAssetLinkSection(window.PropertySections(), scene, assets, document.Session());
+    RegisterPythonEditorCommands(window, document, scene);
     if (!startup.Apply(document)) {
         PrintStartupMessage("Axl Editor: " + startup.Error() + "\n", true);
         return 2;

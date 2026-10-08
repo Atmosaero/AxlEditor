@@ -5,6 +5,8 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPainter>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <cmath>
 #include <stdexcept>
@@ -45,6 +47,25 @@ void Require(bool condition, const char* usage)
 {
     if (!condition) throw std::invalid_argument(usage);
 }
+
+QIcon ClearConsoleIcon()
+{
+    QIcon icon;
+    for (int size : {16, 24, 32, 48, 64}) {
+        QPixmap pixmap(size, size);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.scale(size / 24.0, size / 24.0);
+        painter.setPen(QPen(DarkTheme().icon, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawPolygon(QPolygonF{{4, 14}, {14, 4}, {21, 11}, {11, 21}, {8, 21}});
+        painter.drawLine(QPointF(9, 9), QPointF(16, 16));
+        painter.drawLine(QPointF(11, 21), QPointF(21, 21));
+        painter.end();
+        icon.addPixmap(pixmap);
+    }
+    return icon;
+}
 }
 
 void ConsoleTool::Initialize(EditorContext& context)
@@ -69,6 +90,20 @@ void ConsoleTool::Initialize(EditorContext& context)
     input->setPlaceholderText("Enter command (help)");
     input->setClearButtonEnabled(true);
     inputRow->addWidget(input, 1);
+    auto* clear = new QAction(ClearConsoleIcon(), "Clear Console", panel);
+    clear->setObjectName("ClearConsoleAction");
+    clear->setToolTip("Clear Console");
+    auto* clearButton = new QToolButton(panel);
+    clearButton->setDefaultAction(clear);
+    clearButton->setObjectName("ClearConsoleButton");
+    clearButton->setAccessibleName("Clear Console");
+    clearButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    clearButton->setIconSize(QSize(20, 20));
+    clearButton->setFixedSize(28, 28);
+    clearButton->setAutoRaise(true);
+    clearButton->setFocusPolicy(Qt::NoFocus);
+    QObject::connect(clear, &QAction::triggered, output, &QPlainTextEdit::clear);
+    inputRow->addWidget(clearButton);
     layout->addLayout(inputRow);
     dock->setWidget(panel);
     auto* commands = new ConsoleCommands(dock);
@@ -136,10 +171,6 @@ void ConsoleTool::Initialize(EditorContext& context)
         commands_->Execute(line, *this);
     });
     output->Log(ConsoleMessageType::Success, "Axl Editor ready.");
-    auto* clear = new QAction("Clear Console", dock);
-    clear->setObjectName("ClearConsoleAction");
-    QObject::connect(clear, &QAction::triggered, output, &QPlainTextEdit::clear);
-    context.RegisterAction(clear);
 }
 
 void ConsoleTool::Shutdown()
